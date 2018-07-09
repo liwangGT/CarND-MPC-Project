@@ -41,6 +41,15 @@ double polyeval(Eigen::VectorXd coeffs, double x) {
   return result;
 }
 
+// Evaluate a polynomial derivative
+double dpolyeval(Eigen::VectorXd coeffs, double x) {
+  double result = 0.0;
+  for (int i = 1; i < coeffs.size(); i++) {
+    result += i*coeffs[i] * pow(x, i-1);
+  }
+  return result;
+}
+
 // Fit a polynomial.
 // Adapted from
 // https://github.com/JuliaMath/Polynomials.jl/blob/master/src/Polynomials.jl#L676-L716
@@ -92,6 +101,23 @@ int main() {
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
 
+
+          // transform data into vehicle local coordinate
+          Eigen::VectorXd xwp(ptsx.size());
+          Eigen::VectorXd ywp(ptsx.size());
+          for (int i=0; i<ptsx.size(); i++){
+            double xref = ptsx[i] - px;
+            double yref = ptsy[i] - py;
+            xwp(i) = xref*cos(psi) - yref*sin(psi);
+            ywp(i) = xref*sin(psi) + yref*cos(psi);
+            cout<<"local ref is: " <<xwp(i)<<", "<<ywp(i)<<endl;
+          }
+
+          // fit polynomial to ref points
+          auto coeffs = polyfit(xwp, ywp, 3);
+          double cte = polyeval(coeffs, 0) - 0;
+          double epsi = 0 - atan(dpolyeval(coeffs, 0));
+
           /*
           * TODO: Calculate steering angle and throttle using MPC.
           *
@@ -100,6 +126,16 @@ int main() {
           */
           double steer_value;
           double throttle_value;
+
+          Eigen::VectorXd states(6);
+          states << 0, 0, 0, v, cte, epsi;
+          vector<double> aout;
+          cout<< "input is: "<< states<<endl;
+          cout<< "poly is: "<<coeffs<<endl;
+          aout = mpc.Solve(states, coeffs);
+
+          steer_value = aout[0]/deg2rad(25);
+          throttle_value = aout[1];
 
           json msgJson;
           // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
@@ -110,6 +146,10 @@ int main() {
           //Display the MPC predicted trajectory 
           vector<double> mpc_x_vals;
           vector<double> mpc_y_vals;
+          for (int i=2; i<aout.size(); i+=2){
+            mpc_x_vals.push_back(aout[i]);
+            mpc_y_vals.push_back(aout[i+1]);
+          }
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Green line
@@ -123,6 +163,10 @@ int main() {
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line
+          for (int i =0; i < mpc_x_vals.size(); i++){
+            next_x_vals.push_back(mpc_x_vals[i]);
+            next_y_vals.push_back(polyeval(coeffs, mpc_x_vals[i]));
+          }
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
