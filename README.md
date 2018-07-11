@@ -4,9 +4,23 @@ Self-Driving Car Engineer Nanodegree Program
 ---
 
 
+[//]: # (Image References)
+[img1]: ./img/car_model.png
+[img2]: ./img/mpc_10pt.png
+
+
+
+
+
 ## Project Summary
 
 1. There is a 100ms delay in the actuation. With considering the delay, the car will oscillate around
+
+
+
+![car_model][img1]
+
+[![mpc_video][img2]](https://www.youtube.com/watch?v=SYYWxPRTjLM)
 
 
 
