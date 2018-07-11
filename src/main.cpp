@@ -16,6 +16,8 @@ using json = nlohmann::json;
 constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
 double rad2deg(double x) { return x * 180 / pi(); }
+// This is the length from front to CoG that has a similar radius.
+const double Lf = 2.67;
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
@@ -86,7 +88,7 @@ int main() {
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
     string sdata = string(data).substr(0, length);
-    cout << sdata << endl;
+    //cout << sdata << endl;
     if (sdata.size() > 2 && sdata[0] == '4' && sdata[1] == '2') {
       string s = hasData(sdata);
       if (s != "") {
@@ -100,17 +102,20 @@ int main() {
           double py = j[1]["y"];
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
+          // need current control value for dealing with actuation delays
+          double delta = j[1]["steering_angle"];
+          double a = j[1]["throttle"];
 
 
           // transform data into vehicle local coordinate
           Eigen::VectorXd xwp(ptsx.size());
           Eigen::VectorXd ywp(ptsx.size());
-          for (int i=0; i<ptsx.size(); i++){
+          for (size_t i=0; i<ptsx.size(); i++){
             double xref = ptsx[i] - px;
             double yref = ptsy[i] - py;
-            xwp(i) = xref*cos(psi) - yref*sin(psi);
-            ywp(i) = xref*sin(psi) + yref*cos(psi);
-            cout<<"local ref is: " <<xwp(i)<<", "<<ywp(i)<<endl;
+            xwp(i) = xref*cos(psi) + yref*sin(psi);
+            ywp(i) = -xref*sin(psi) + yref*cos(psi);
+            //cout<<"local ref is: " <<xwp(i)<<", "<<ywp(i)<<endl;
           }
 
           // fit polynomial to ref points
@@ -127,14 +132,24 @@ int main() {
           double steer_value;
           double throttle_value;
 
+          // deal with delay of t_delay by computing one step forward
+          double t_delay = 0.1;
+          double xp1 = 0 + v*t_delay;
+          double yp1 = 0;
+          double psi1 = 0 + v*(-delta)/Lf*t_delay;
+          double vp1 = v + a*t_delay;
+          double ctep1 = cte + v*sin(epsi)*t_delay;
+          double epsi1 = epsi + v*(-delta)/Lf*t_delay;
+
+   
           Eigen::VectorXd states(6);
-          states << 0, 0, 0, v, cte, epsi;
+          states << xp1, yp1, psi1, vp1, ctep1, epsi1;
           vector<double> aout;
-          cout<< "input is: "<< states<<endl;
-          cout<< "poly is: "<<coeffs<<endl;
+          //cout<< "input is: "<< states<<endl;
+          //cout<< "poly is: "<<coeffs<<endl;
           aout = mpc.Solve(states, coeffs);
 
-          steer_value = aout[0]/deg2rad(25);
+          steer_value = aout[0]/deg2rad(25)/Lf;
           throttle_value = aout[1];
 
           json msgJson;
@@ -146,7 +161,7 @@ int main() {
           //Display the MPC predicted trajectory 
           vector<double> mpc_x_vals;
           vector<double> mpc_y_vals;
-          for (int i=2; i<aout.size(); i+=2){
+          for (size_t i=2; i<aout.size(); i+=2){
             mpc_x_vals.push_back(aout[i]);
             mpc_y_vals.push_back(aout[i+1]);
           }
@@ -163,7 +178,7 @@ int main() {
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line
-          for (int i =0; i < mpc_x_vals.size(); i++){
+          for (size_t i =0; i < mpc_x_vals.size(); i++){
             next_x_vals.push_back(mpc_x_vals[i]);
             next_y_vals.push_back(polyeval(coeffs, mpc_x_vals[i]));
           }
@@ -173,7 +188,7 @@ int main() {
 
 
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-          std::cout << msg << std::endl;
+          //std::cout << msg << std::endl;
           // Latency
           // The purpose is to mimic real driving conditions where
           // the car does actuate the commands instantly.

@@ -8,7 +8,7 @@ using CppAD::AD;
 // TODO: Set the timestep length and duration
 size_t N = 10;
 double dt = 0.1;
-double ref_v = 40;
+double ref_v = 100;
 
 // This value assumes the model presented in the classroom is used.
 //
@@ -67,24 +67,34 @@ class FG_eval {
     // Any additions to the cost should be added to `fg[0]`.
     fg[0] = 0;
       
-      // The part of the cost based on the reference state.
-      for (int t = 0; t < N; t++) {
-          fg[0] += 1000*CppAD::pow(vars[cte_start + t], 2);
-          fg[0] += 1000*CppAD::pow(vars[epsi_start + t], 2);
-          fg[0] += CppAD::pow(vars[v_start + t] - ref_v, 2);
-      }
-      
-      // Minimize the use of actuators.
-      for (int t = 0; t < N - 1; t++) {
-          fg[0] += 50*CppAD::pow(vars[delta_start + t], 2);
-          fg[0] += 50*CppAD::pow(vars[a_start + t], 2);
-      }
-      
-      // Minimize the value gap between sequential actuations.
-      for (int t = 0; t < N - 2; t++) {
-          fg[0] += 250000*CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
-          fg[0] += 5000*CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
-      }
+    // cost coefficient tunning parameters
+    AD<double> lateral_cost = 3000;
+    AD<double> heading_cost = 2000;
+    AD<double> v_cost = 1;
+    AD<double> control_delta_cost = 1;
+    AD<double> control_a_cost = 1;
+    AD<double> control_delta_rate_cost = 5;
+    AD<double> control_a_rate_cost = 1;
+
+
+    // The part of the cost based on the reference state.
+    for (size_t t = 0; t < N; t++) {
+        fg[0] += lateral_cost*CppAD::pow(vars[cte_start + t], 2);
+        fg[0] += heading_cost*CppAD::pow(vars[epsi_start + t], 2);
+        fg[0] += v_cost*CppAD::pow(vars[v_start + t] - ref_v, 2);
+    }
+    
+    // Minimize the use of actuators.
+    for (size_t t = 0; t < N - 1; t++) {
+        fg[0] += control_delta_cost*CppAD::pow(vars[delta_start + t], 2);
+        fg[0] += control_a_cost*CppAD::pow(vars[a_start + t], 2);
+    }
+    
+    // Minimize the value gap between sequential actuations.
+    for (size_t t = 0; t < N - 2; t++) {
+        fg[0] += control_delta_rate_cost*CppAD::pow(vars[delta_start + t + 1] - vars[delta_start + t], 2);
+        fg[0] += control_a_rate_cost*CppAD::pow(vars[a_start + t + 1] - vars[a_start + t], 2);
+    }
 
     // Reference State Cost
     // TODO: Define the cost related the reference state and
@@ -110,7 +120,7 @@ class FG_eval {
     fg[1 + epsi_start] = vars[epsi_start];
 
       // The rest of the constraints
-      for (int t = 1; t < N; t++) {
+      for (size_t t = 1; t < N; t++) {
           // The state at time t+1 .
           AD<double> x1 = vars[x_start + t];
           AD<double> y1 = vars[y_start + t];
@@ -131,11 +141,9 @@ class FG_eval {
           AD<double> delta0 = vars[delta_start + t - 1];
           AD<double> a0 = vars[a_start + t - 1];
           
-          //AD<double> f0 = FG_eval::polyeval(coeffs, x0);
-          //AD<double> psides0 = CppAD::atan(FG_eval::dpolyeval(coeffs, x0));
-          AD<double> f0 = coeffs[0] + coeffs[1] * x0 + coeffs[2] * CppAD::pow(x0, 2) + coeffs[3] * CppAD::pow(x0, 3);
-          AD<double> psides0 = CppAD::atan(coeffs[1] + 2 * coeffs[2] * x0 + 3 * coeffs[3] * CppAD::pow(x0, 2));
-          
+          AD<double> f0 = FG_eval::polyeval(coeffs, x0);
+          AD<double> psides0 = CppAD::atan(FG_eval::dpolyeval(coeffs, x0));
+
           // Here's `x` to get you started.
           // The idea here is to constraint this value to be 0.
           //
@@ -188,7 +196,7 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   // Initial value of the independent variables.
   // SHOULD BE 0 besides initial state.
   Dvector vars(n_vars);
-  for (int i = 0; i < n_vars; i++) {
+  for (size_t i = 0; i < n_vars; i++) {
     vars[i] = 0;
   }
 
@@ -210,7 +218,7 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   vars[epsi_start] = epsi;
   // Set all non-actuators upper and lowerlimits
   // to the max negative and positive values.
-  for (int i = 0; i < delta_start; i++) {
+  for (size_t i = 0; i < delta_start; i++) {
     vars_lowerbound[i] = -1.0e19;
     vars_upperbound[i] = 1.0e19;
   }
@@ -218,14 +226,14 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   // The upper and lower limits of delta are set to -25 and 25
   // degrees (values in radians).
   // NOTE: Feel free to change this to something else.
-  for (int i = delta_start; i < a_start; i++) {
+  for (size_t i = delta_start; i < a_start; i++) {
     vars_lowerbound[i] = -0.436332;
     vars_upperbound[i] = 0.436332;
   }
 
   // Acceleration/decceleration upper and lower limits.
   // NOTE: Feel free to change this to something else.
-  for (int i = a_start; i < n_vars; i++) {
+  for (size_t i = a_start; i < n_vars; i++) {
     vars_lowerbound[i] = -1.0;
     vars_upperbound[i] = 1.0;
   }
@@ -234,7 +242,7 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   // Should be 0 besides initial state.
   Dvector constraints_lowerbound(n_constraints);
   Dvector constraints_upperbound(n_constraints);
-  for (int i = 0; i < n_constraints; i++) {
+  for (size_t i = 0; i < n_constraints; i++) {
     constraints_lowerbound[i] = 0;
     constraints_upperbound[i] = 0;
   }
@@ -279,8 +287,8 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
 
 
   // TODO: remove: debug message
-  std::cout<< "Lower bounds" << constraints_lowerbound<<std::endl;
-  std::cout<< "Upper bounds" << constraints_upperbound<<std::endl;
+  //std::cout<< "Lower bounds" << constraints_lowerbound<<std::endl;
+  //std::cout<< "Upper bounds" << constraints_upperbound<<std::endl;
 
 
   // solve the problem
@@ -290,7 +298,7 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
 
   // Check some of the solution values
   ok &= solution.status == CppAD::ipopt::solve_result<Dvector>::success;
-  std::cout<<"solve status"<<solution.status<<" solver output: "<<solution.x<<std::endl;
+  //std::cout<<"solve status"<<solution.status<<" solver output: "<<solution.x<<std::endl;
 
   // Cost
   auto cost = solution.obj_value;
@@ -304,7 +312,7 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   vector<double> mpc_out;
   mpc_out.push_back(solution.x[delta_start]);
   mpc_out.push_back(solution.x[a_start]);
-  for (int i=0; i<N-1; i++){
+  for (size_t i=0; i<N-1; i++){
     mpc_out.push_back(solution.x[x_start+i+1]);
     mpc_out.push_back(solution.x[y_start+i+1]);
   }
