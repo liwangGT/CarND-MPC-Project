@@ -13,16 +13,43 @@ Self-Driving Car Engineer Nanodegree Program
 
 
 ## Project Summary
-
-1. There is a 100ms delay in the actuation. With considering the delay, the car will oscillate around
-
+In this project, a MPC controller is created to make a simulated self-driving follow desired track. The MPC controller is formulated as a nonlinear optimization problem, which is solved with an open source solver [Ipopt](https://projects.coin-or.org/Ipopt). The implemented MPC controller is able to drive the vehicle to follow desired track with an average speed of 80 mph.
 
 
+The development environment is set up with the udacity/controls_kit docker image. To activate the docker container, run the following command. 
+```
+docker run -it -p 4567:4567 -v $USER_PATH:/work udacity/controls_kit:latest
+```
+
+### Model description
+The model of the vehicle is a kinematic bicycle. The states of the model are chosen as: x, y positions, yaw angle, velocity, cross track error, and yaw angle error. The actuators for the model are steering angle and acceleration. The update equation for the kinematic bicycle model is given as follows.
 ![car_model][img1]
+This model is simple yet gives us a good abstraction of the actual car dynamics. Our MPC controller is designed based this kinematic bicycle model. Since the MPC controller executed periodically with real-time sensing data, it can effectively compensate for tracking error with feedback.
 
+* Tuning MPC controller parameters
+The MPC controller has many parameters. The tuning process is mostly by trial and error. However, there are also some intuitions we can follow to speed up the process. The controller steps N=10 and dt=0.1s are selected to achieve the best performance of the car. Larger N*dt extends the look ahead horizon of the controller, so that we can better optimize for the overall performance. However, dt needs to be smaller so that we can better approximate the nonlinear dynamics of the car. At the same, N cannot be too large because it will introduce too many optimization variables that cannot be computed within allowed amount of time. The final selection reaches a balance between performance, computation time, and accuracy.
+
+Other important tuning parameters are the cost weights for different cost components. The following set of weights gives our controller the best tracking behavior. It allows the car to reach an average speed of 80mph without running off the road.
+```
+    AD<double> lateral_cost = 3000;
+    AD<double> heading_cost = 2000;
+    AD<double> v_cost = 1;
+    AD<double> control_delta_cost = 1;
+    AD<double> control_a_cost = 1;
+    AD<double> control_delta_rate_cost = 5;
+    AD<double> control_a_rate_cost = 1;
+```
+
+* MPC reference generation
+The track information is provided as a set of waypoint along the way. A third order polynomial is used to fit waypoints. Then this fitted polynomial is used to extract reference points for the car to follow. The MPC controller solves a nonlinear optimization problem to make the MPC control points to follow the reference points subject to the vehicle dynamics constraint. The reference points and actual MPC control points are visualized as yellow and green lines in the simulator. (See the video below for detail)
+
+* MPC with latency of 100 ms
+The simulated car has a delay of 100 ms in actuation. If the delay is not compensated, the  control actions will always be 100ms late than desired. This will cause the car to oscillate around the desired path. This actuation is easily compensated with MPC. We first propagate the current state forward for 100ms, then feed this state as initial state to the MPC controller. In this way, the desired control action after delay is computed correctly. 
+
+
+### Final video (click on the image to view the youtube video)
+The rendering of the simulator takes a large percentage of the CPU. Thus the MPC controller can only run at a limited frequency. But with our efficient implementation, the MPC controller can drive the car safely at an average speed of 80 mph.
 [![mpc_video][img2]](https://www.youtube.com/watch?v=SYYWxPRTjLM)
-
-
 
 
 ## Dependencies
