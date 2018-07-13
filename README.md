@@ -24,12 +24,13 @@ docker run -it -p 4567:4567 -v $USER_PATH:/work udacity/controls_kit:latest
 ### Model description
 The model of the vehicle is a kinematic bicycle. The states of the model are chosen as: x, y positions, yaw angle, velocity, cross track error, and yaw angle error. The actuators for the model are steering angle and acceleration. The update equation for the kinematic bicycle model is given as follows.
 ![car_model][img1]
+
 This model is simple yet gives us a good abstraction of the actual car dynamics. Our MPC controller is designed based this kinematic bicycle model. Since the MPC controller executed periodically with real-time sensing data, it can effectively compensate for tracking error with feedback.
 
 * Tuning MPC controller parameters
 The MPC controller has many parameters. The tuning process is mostly by trial and error. However, there are also some intuitions we can follow to speed up the process. The controller steps N=10 and dt=0.1s are selected to achieve the best performance of the car. Larger N*dt extends the look ahead horizon of the controller, so that we can better optimize for the overall performance. However, dt needs to be smaller so that we can better approximate the nonlinear dynamics of the car. At the same, N cannot be too large because it will introduce too many optimization variables that cannot be computed within allowed amount of time. The final selection reaches a balance between performance, computation time, and accuracy.
 
-Other important tuning parameters are the cost weights for different cost components. The following set of weights gives our controller the best tracking behavior. It allows the car to reach an average speed of 80mph without running off the road.
+* Other important tuning parameters are the cost weights for different cost components. The following set of weights gives our controller the best tracking behavior. It allows the car to reach an average speed of 80mph without running off the road.
 ```
     AD<double> lateral_cost = 3000;
     AD<double> heading_cost = 2000;
